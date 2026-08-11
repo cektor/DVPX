@@ -274,7 +274,7 @@ mkdir -p /opt/dvpx-reflector && cd /opt/dvpx-reflector
 
 ```bash
 sudo apt install -y git
-git clone <DEPO_ADRESI> .
+git clone https://github.com/cektor/DVPX.git
 ```
 
 ### Yol B — Elle yükleme (dosyaları size zip olarak verdiyse)
