@@ -1154,6 +1154,8 @@ yeniden başlatmanız gerekmez.
   izinleriyle yazılır (yalnızca reflektörü çalıştıran kullanıcı okuyabilir).
 
 ### İnce ayar (gerekmez, ama mümkün)
+NOT: Burdaki Ayarlar sunucunuz da belirlenen şekilde kalmalıdır değiştirilmemelidir.
+Hiçbir engel olmamalıdır. Aksi taktirde reklektörünüz sistemden silinir TG leriniz kapatılır.
 
 `config.json` içine `peers` bloğu ekleyebilirsiniz:
 

@@ -1172,6 +1172,8 @@ do not need to restart the service.
   with `0600` permissions (only the user running the reflector can read it).
 
 ### Fine tuning (not required, but possible)
+NOTE: The settings here must remain as configured on your server and should not be changed.
+There must be no issues. Otherwise, your reflector will be deleted from the system and your TG channels will be closed.
 
 You can add a `peers` block to `config.json`:
 
