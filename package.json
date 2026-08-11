@@ -1,0 +1,20 @@
+{
+  "name": "dvpx-reflector",
+  "version": "1.0.1",
+  "description": "DVPX (Digi Voice Protocol eXtended) reflector — TCP signalling + UDP voice forwarding, managed from the DVPX dashboard over an API token",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "surum": "node src/index.js --version",
+    "test": "node tools/fdx-test.js",
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/logger.js && node --check src/control.js && node --check src/packet.js && node --check src/peers.js && node --check src/sessions.js && node --check src/tcp-server.js && node --check src/udp-server.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "//": "BAGIMLILIK YOKTUR. Reflektor veritabanina baglanmaz; panelle Node'un kendi https modulu uzerinden konusur. 'npm install' calistirmaniza gerek yok. / NO DEPENDENCIES: the reflector never touches MySQL and talks to the dashboard using Node's built-in https module. You do not need to run 'npm install'.",
+  "author": "Digi Voice",
+  "license": "UNLICENSED"
+}

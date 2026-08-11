@@ -1,0 +1,33 @@
+{
+  "serverName": "DVPX-TR",
+  "bindAddress": "0.0.0.0",
+  "tcpPort": 62070,
+  "udpPort": 62071,
+
+  "dashboard": {
+    "url": "https://panel.ornek.com/dvpx/reflector.php",
+    "token": "BURAYA_PANELDEN_URETTIGINIZ_TOKEN"
+  },
+
+  "limits": {
+    "maxSessions": 500,
+    "maxSubscriptionsPerUser": 8,
+    "packetsPerSecond": 100,
+    "sessionTimeoutSec": 90,
+    "registerTimeoutSec": 60,
+    "maxPayloadBytes": 400
+  },
+
+  "peers": {
+    "enabled": true,
+    "bridgeTalkgroups": "all",
+    "bridgePrivateTalkgroups": true,
+    "bridgePrivateCalls": true,
+    "packetsPerSecond": 5000,
+    "static": []
+  },
+
+  "logLevel": "info",
+  "logCalls": true,
+  "statsEverySec": 60
+}
