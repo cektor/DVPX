@@ -226,6 +226,28 @@ class UdpServer {
 
   /** Özel çağrı: hedef DMR ID'nin kayıtlı endpoint'ine tek kopya. */
   forwardPrivate(msg, session, header) {
+    /* ── ECHO TEST ────────────────────────────────────────────────────────
+     * Panelde `is_system=1` ile işaretli sabit TG'nin numarası (varsayılan
+     * 112233, "Echo Test"). Bu numaraya yapılan özel çağrı gerçek bir hedef
+     * ARANMADAN doğrudan gönderene geri yansıtılır — ses testi budur.
+     *
+     * KAYDET, SONRA OYNAT — CANLI YANSITMA DEĞİL. Paketi ANINDA geri
+     * göndermek "canlı monitör" gibi davranır: kişi konuşurken AYNI ANDA
+     * kendi sesini duyar — istenen bu değildir. Bunun yerine PTT_ON..PTT_OFF
+     * arasındaki tüm kareler biriktirilir (bkz. [echoIsle]) ve yayın
+     * BİTTİKTEN SONRA, gerçek bir gelen özel çağrı gibi (PTT_ON + kareler +
+     * PTT_OFF) geri oynatılır (bkz. [echoOynatBaslat]).
+     *
+     * PEER'LARA GONDERİLMEZ: bu tamamen YEREL bir davranıştır, kişi hangi
+     * reflektöre bağlıysa testi ORADA alır; ağ genelinde köprülemenin hiçbir
+     * faydası yoktur ve boşuna bant genişliği harcardı.
+     */
+    const echoTg = this.db.echoTestTg;
+    if (echoTg && header.targetId === echoTg) {
+      this.echoIsle(msg, session, header);
+      return;
+    }
+
     // Ozel cagri da ag genelindedir: hedef baska bir reflektorde olabilir.
     // Cerceve HER ZAMAN peer'lara gonderilir; her peer hedefi kendinde
     // bulursa teslim eder, bulamazsa sessizce atar. (Kisinin iki cihazi iki
@@ -242,6 +264,131 @@ class UdpServer {
       return;
     }
     this.send(msg, target.udpPort, target.udpAddress, session);
+  }
+
+  /* ══ Echo Test — kaydet / oynat ═════════════════════════════════════════
+   *
+   * TASARIM: bir ses testi "önce konuş, sonra kendini dinle" demektir; PTT
+   * basılıyken aynı anda kendi sesini duymak (canlı monitör) hem yanıltıcı
+   * hem de kafa karıştırıcıdır. Bu yüzden kareler PTT_ON..PTT_OFF arasında
+   * SAKLANIR ve yayın gerçekten BİTTİKTEN SONRA, sıradan bir gelen özel
+   * çağrı gibi (PTT_ON + kareler + PTT_OFF) tek seferde geri gönderilir.
+   * ══════════════════════════════════════════════════════════════════════ */
+
+  /** Bir kayıtta saklanacak en fazla kare — bellek şişmesin (20ms/kare ≈ 30s). */
+  static get ECHO_MAKS_KARE() { return 1500; }
+  /** Kare aralığı (ms) — DVPX ses motorunun çerçeve süresiyle aynı olmalı. */
+  static get ECHO_KARE_MS() { return 20; }
+  /** Yayın BİTTİKTEN (PTT_OFF) sonra oynatımın başlamasına kadar beklenen süre. */
+  static get ECHO_GECIKME_MS() { return 2000; }
+
+  /** Echo Test hedefine gelen PTT_ON/VOICE/PTT_OFF akışını kaydeder. */
+  echoIsle(msg, session, header) {
+    const PT = packet.PACKET_TYPE;
+
+    if (header.packetType === PT.PTT_ON) {
+      // Yeni kayit basliyor: onceki BITMEMIS bir oynatim/bekleme varsa
+      // durdur — ust uste binen iki oynatim karisik/bozuk ses uretirdi.
+      this.echoOynatimiDurdur(session);
+      session.echoKayit = [];
+      return;
+    }
+
+    if (header.packetType === PT.VOICE) {
+      // PTT_ON kaybolmus olabilir (UDP); ilk VOICE karesiyle kayda basla —
+      // reflektorun kendi TX takibiyle AYNI dayaniklilik ilkesi.
+      if (!session.echoKayit) {
+        session.echoKayit = [];
+      }
+      if (session.echoKayit.length < UdpServer.ECHO_MAKS_KARE) {
+        session.echoKayit.push(Buffer.from(msg));
+      }
+      return;
+    }
+
+    if (header.packetType === PT.PTT_OFF) {
+      const kayit = session.echoKayit;
+      session.echoKayit = null;
+      if (kayit && kayit.length) {
+        // Oynatim ANINDA baslamaz: yayin bittikten [ECHO_GECIKME_MS] sonra
+        // baslar — kullanici PTT'yi biraktigi an degil, kisa bir sure
+        // sonra kendi sesini duymalidir.
+        session.echoGecikmeTimer = setTimeout(() => {
+          session.echoGecikmeTimer = null;
+          this.echoOynatBaslat(session, kayit);
+        }, UdpServer.ECHO_GECIKME_MS);
+      }
+    }
+  }
+
+  /**
+   * Biriktirilen kareleri sıradan bir GELEN özel çağrı gibi geri oynatır:
+   * PTT_ON, ardından her kareyi [ECHO_KARE_MS] aralıklarla, sonunda PTT_OFF.
+   *
+   * Kare aralığı KORUNUR: hepsini tek seferde göndermek istemcinin jitter
+   * buffer'ını anında taşırır ve sesi hızlandırılmış/bozuk çalardı.
+   */
+  echoOynatBaslat(session, kareler) {
+    if (!session.registered) {
+      return;
+    }
+    const sourceId = session.dmrId;
+    const targetId = this.db.echoTestTg;
+    let seq = 0;
+
+    const pttOn = packet.build({
+      callType: packet.CALL_TYPE.PRIVATE,
+      packetType: packet.PACKET_TYPE.PTT_ON,
+      sourceId,
+      targetId,
+      seqNum: seq,
+    }, Buffer.alloc(0));
+    seq = (seq + 1) & 0xffff;
+    this.send(pttOn, session.udpPort, session.udpAddress, null);
+
+    let i = 0;
+    session.echoOynatimTimer = setInterval(() => {
+      if (!session.registered || i >= kareler.length) {
+        this.echoOynatimiDurdur(session);
+        if (session.registered) {
+          const pttOff = packet.build({
+            callType: packet.CALL_TYPE.PRIVATE,
+            packetType: packet.PACKET_TYPE.PTT_OFF,
+            sourceId,
+            targetId,
+            seqNum: seq,
+          }, Buffer.alloc(0));
+          this.send(pttOff, session.udpPort, session.udpAddress, null);
+        }
+        return;
+      }
+      const yuk = packet.payloadSlice(kareler[i]);
+      const kare = packet.build({
+        callType: packet.CALL_TYPE.PRIVATE,
+        packetType: packet.PACKET_TYPE.VOICE,
+        sourceId,
+        targetId,
+        seqNum: seq,
+      }, yuk);
+      seq = (seq + 1) & 0xffff;
+      this.send(kare, session.udpPort, session.udpAddress, null);
+      i += 1;
+    }, UdpServer.ECHO_KARE_MS);
+  }
+
+  /**
+   * Süren bir oynatımı YA DA oynatım öncesi bekleme sayacını durdurur —
+   * yeni kayıt başlaması ya da bağlantı kopması durumunda çağrılır.
+   */
+  echoOynatimiDurdur(session) {
+    if (session.echoGecikmeTimer) {
+      clearTimeout(session.echoGecikmeTimer);
+      session.echoGecikmeTimer = null;
+    }
+    if (session.echoOynatimTimer) {
+      clearInterval(session.echoOynatimTimer);
+      session.echoOynatimTimer = null;
+    }
   }
 
   /* ══ Peer'dan gelen ses ═══════════════════════════════════════════════ */

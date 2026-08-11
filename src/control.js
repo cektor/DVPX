@@ -254,6 +254,14 @@ class Control {
      */
     this.peers = [];
     this.grants = new Map();         // tgNumber -> Set(ana DMR ID)
+    /**
+     * Sabit "Echo Test" TG numarası (0 = tanımsız/panel eski sürüm).
+     *
+     * udp-server.forwardPrivate bu numaraya yapılan ÖZEL ÇAĞRIYI, gerçek bir
+     * hedef aramadan, doğrudan gönderene geri yansıtır. Panel yöneticisi
+     * numarayı değiştirebilir; her politika turunda güncellenir.
+     */
+    this.echoTestTg = 0;
     this.serverInfo = null;          // {id, name, status, published, ...}
     this.hasPolicy = false;
 
@@ -455,6 +463,9 @@ class Control {
     this.blocked = blocked;
     this.grants = grants;
     this.peers = peers;
+    // Panel bu alanı gondermiyorsa (eski surum panel) 0 kalir ve echo test
+    // devre disi olur — davranis eskisiyle birebir aynidir, hicbir sey bozulmaz.
+    this.echoTestTg = Number(snap.echoTest) || 0;
     this.stamp = String(snap.policy || '');
     this.serverInfo = snap.server || null;
     this.hasPolicy = true;

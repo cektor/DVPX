@@ -75,6 +75,17 @@ class Session {
     this.txFrames = 0;
     this.txStartedAt = 0;
 
+    /**
+     * Echo Test kayıt/oynatım durumu (bkz. udp-server.js echoIsle).
+     * echoKayit: PTT_ON..PTT_OFF arasında biriktirilen ham kareler (null =
+     *            kayıt yok). echoGecikmeTimer: PTT_OFF sonrası oynatımın
+     *            başlamasını bekleten sayaç. echoOynatimTimer: süren
+     *            oynatımın kare zamanlayıcısı.
+     */
+    this.echoKayit = null;
+    this.echoGecikmeTimer = null;
+    this.echoOynatimTimer = null;
+
     /** İstatistik / stats */
     this.packetsIn = 0;
     this.packetsForwarded = 0;
@@ -295,6 +306,18 @@ class SessionStore {
     if (session.token) {
       this.sessionsByToken.delete(session.token);
     }
+    // Echo Test oynatımı YA DA oynatım öncesi bekleme SÜRÜYORSA durdur —
+    // kapanmış bir oturumun (artık geçersiz) UDP adresine göndermeye devam
+    // etmesin.
+    if (session.echoGecikmeTimer) {
+      clearTimeout(session.echoGecikmeTimer);
+      session.echoGecikmeTimer = null;
+    }
+    if (session.echoOynatimTimer) {
+      clearInterval(session.echoOynatimTimer);
+      session.echoOynatimTimer = null;
+    }
+    session.echoKayit = null;
     // Aynı DMR ID başka bir oturuma geçmişse onu silmemeye dikkat et.
     if (session.dmrId && this.sessionsByDmrId.get(session.dmrId) === session) {
       this.sessionsByDmrId.delete(session.dmrId);
