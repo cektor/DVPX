@@ -1,6 +1,6 @@
 [Unit]
 Description=DVPX Reflector (Digi Voice Protocol eXtended)
-Documentation=file:/opt/dvpx/DVPX/dvpx-reflector/KURULUM.md
+Documentation=file:/opt/dvpx-reflector/KURULUM.md
 # Reflektörün veritabanı bağımlılığı YOKTUR; yalnızca ağ gerekir.
 # Panele (HTTPS) ulaşamazsa da başlar ve önbellekteki politikayla çalışır.
 After=network-online.target
@@ -10,7 +10,7 @@ Wants=network-online.target
 Type=simple
 
 # Kurulum yolunuza göre düzenleyin / adjust to your installation path
-WorkingDirectory=/opt/dvpx/DVPX/dvpx-reflector
+WorkingDirectory=/opt/dvpx-reflector
 ExecStart=/usr/bin/node src/index.js
 
 # Ayrıcalıksız kullanıcı ile çalıştırın:
@@ -44,7 +44,7 @@ MemoryDenyWriteExecute=false
 # Böylece panel erişilemezken yeniden başlatılsa da hizmet verebilir.
 # ProtectSystem=strict tüm dosya sistemini salt-okunur yaptığı için bu dizine
 # açıkça yazma izni vermek GEREKİR; yolu kendi kurulumunuza göre düzeltin.
-ReadWritePaths=/opt/dvpx/DVPX/dvpx-reflector
+ReadWritePaths=/opt/dvpx-reflector
 
 # Kaynak sınırları / resource limits
 LimitNOFILE=65535

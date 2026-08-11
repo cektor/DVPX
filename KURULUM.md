@@ -2,7 +2,7 @@
 
 Bu kılavuz **hiç sunucu yönetmemiş biri için** yazıldı. Komutları sırayla
 kopyalayıp yapıştırmanız yeterlidir. Her adımda "ne göreceğinizi" de yazdım;
-gördüğünüz şey yazandan farklıysa doğrudan [Sorun Giderme](#9-sorun-giderme)
+gördüğünüz şey yazandan farklıysa doğrudan [Sorun Giderme](#12-sorun-giderme)
 bölümüne bakın.
 
 Tahmini süre: **20–30 dakika.**
@@ -78,26 +78,35 @@ En düşük gereksinimler gerçekten düşüktür:
 
 | | En az | Rahat |
 |---|---|---|
-| CPU | 1 çekirdek | 2 çekirdek |
+| CPU | 1 çekirdek | 4 çekirdek |
 | RAM | 1 GB | 4 GB |
 | Disk | 5 GB | 30 GB |
 | İşletim sistemi | Ubuntu 22.04 / Debian 12 | Ubuntu 24.04 |
+| Node.js | 18 | 20 |
 
-Statik Sabit IP Şarttır!!!!!!
+**SABİT (STATİK) GENEL IP ADRESİ ŞARTTIR.** Uygulamaların reflektöre
+internetten doğrudan bağlanması gerekir; adres değişirse bağlı olan herkes
+düşer. VPS sağlayıcıları sabit IP'yi varsayılan olarak verir.
 
-> **Neden VPS?** Reflektöre uygulamaların **internetten doğrudan
-> bağlanabilmesi** gerekir. Ev interneti genelde buna uygun değildir (dinamik
-> IP, NAT, port kapalı). Yine de evde denemek isterseniz modeminizde port
-> yönlendirmesi yapmanız gerekir.
-
-**Önemli:** Sunucunuzun **sabit (statik) bir genel IP adresi** olmalı. VPS
-sağlayıcıları bunu varsayılan olarak verir.
+> **VPS şart mı?** Hayır — belirleyici olan kutunun türü değil, karşıladığı
+> gereksinimlerdir. **Raspberry Pi 4 / 5** ya da benzeri bir mini bilgisayar
+> (Intel NUC, thin client, eski bir dizüstü) yukarıdaki eşiği karşıladığı ve
+> 7/24 açık kalabildiği sürece kullanılabilir. Raspberry Pi kullanacaksanız
+> 64-bit Raspberry Pi OS (Debian tabanlı) kurun; bu kılavuzdaki bütün komutlar
+> olduğu gibi çalışır. Sistemi SD kart yerine SSD/USB diskten çalıştırmanız
+> önerilir: SD kartlar sürekli yazma altında yıllar değil aylar dayanır ve
+> habersiz ölürler.
+>
+> Ev interneti genelde uygun DEĞİLDİR (dinamik IP, NAT, kapalı portlar).
+> Yine de evde denemek isterseniz modeminizde port yönlendirmesi yapmanız
+> gerekir.
 
 ### b) Sabit bir adres (IP veya alan adı)
 
-Ya IP'yi doğrudan kullanırsınız (`203.0.113.10`) ya da bir alan adı
-yönlendirirsiniz (`dvpx.sizinsite.com`). Alan adı daha iyidir: sunucu
-değiştirirseniz kullanıcıların ayarı değişmez.
+Ya IP'yi doğrudan kullanırsınız (`203.0.113.10`) ya da bir **alan adı**
+yönlendirirsiniz (`dvpx.sizinsite.com`). **Alan adı daha iyidir:** sunucuyu bir
+gün başka bir sağlayıcıya taşırsanız yalnızca DNS kaydını değiştirirsiniz,
+kullanıcıların ayarına dokunmanız gerekmez.
 
 ### c) Panelden bir API token'ı
 
@@ -244,38 +253,84 @@ v20.18.1
 > **Not:** `npm install` çalıştırmanıza **gerek yok**. DVPX reflektörünün hiçbir
 > dış paket bağımlılığı yoktur; Node'un kendi içindeki modülleri kullanır.
 
+### Git'i de şimdi kurun
+
+Bir sonraki adımda dosyaları depodan çekeceğiz; `git` çoğu sunucuda kurulu
+gelmez:
+
+```bash
+sudo apt install -y git
+```
+
+Doğrulayın:
+
+```bash
+git --version
+```
+
+`git version 2.x.x` gibi bir çıktı görmelisiniz.
+
 ---
 
 ## 6. Adım 4 — DVPX dosyalarını yerleştirin
 
-Dosyaları koyacağımız yer: `/opt/dvpx-reflector`
-
-```bash
-mkdir -p /opt/dvpx-reflector && cd /opt/dvpx-reflector
-```
-
-İşimiz bittiğinde dizin yapısı şöyle olacak — **çalışacağımız yer
-`dvpx-reflector` klasörü**:
+İşimiz bittiğinde dizin yapısı şöyle olacak:
 
 ```
-/opt/dvpx/
-└── DVPX/
-    ├── dashboard/          ← bu size gerekmez (panel yöneticisinde çalışır)
-    └── dvpx-reflector/     ← BURADA çalışacağız
-        ├── src/            ← program dosyaları
-        ├── tools/          ← test istemcisi
-        ├── config.json     ← BUNU siz oluşturacaksınız (Adım 5)
-        └── dvpx-reflector.service
+/opt/dvpx-reflector/            ← BURADA çalışacağız
+├── src/                        ← program dosyaları
+├── tools/                      ← test istemcisi
+├── package.json
+├── config.example.json         ← örnek; kopyalamanız gerekmez
+├── config.json                 ← BUNU siz oluşturacaksınız (Adım 5)
+├── dvpx-reflector.service
+├── KURULUM.md                  ← bu dosya
+└── install.md                  ← aynı kılavuzun İngilizcesi
 ```
+
+Yani bu kılavuzdaki **çalışma dizini** hep şudur:
+
+```
+/opt/dvpx-reflector
+```
+
+> **Depoda panel (dashboard) YOKTUR** — yayınlanan depo yalnızca reflektördür ve
+> dosyalar doğrudan kökünde durur. Panel ağın merkezinde, ağ yöneticisinde
+> çalışır; sizin sunucunuza kurulmaz.
+
+> **Neden tam olarak bu yol?** Depoyla birlikte gelen
+> `dvpx-reflector.service` dosyası bu yolu kullanır. Bu yola kurarsanız servis
+> dosyasını **hiç düzenlemeden** kopyalayabilirsiniz; başka bir yere kurarsanız
+> üç satırını elle değiştirmeniz gerekir (Adım 8'de anlatılıyor).
 
 Şimdi DVPX dosyalarını buraya alacağız. **İki yol var**, birini seçin.
+Git ile kurmanız **önerilir**: güncelleme tek komuta iner (Bölüm 14).
 
-### Yol A — Git ile (yönetici size depo adresi verdiyse)
+### Yol A — Git ile (önerilen)
+
+Git kurulu değilse önce onu kurun:
 
 ```bash
 sudo apt install -y git
-git clone https://github.com/cektor/DVPX.git
 ```
+
+Sonra depoyu doğrudan `/opt/dvpx-reflector` içine klonlayın:
+
+```bash
+sudo git clone https://github.com/cektor/DVPX.git /opt/dvpx-reflector
+```
+
+Klonlama bittiğinde çalışma dizinine geçin:
+
+```bash
+cd /opt/dvpx-reflector
+```
+
+> **Komutun sonundaki yolu atlamayın.** `git clone <adres>` biçiminde
+> yazarsanız git, bulunduğunuz dizinin içine `DVPX` adlı bir klasör açar ve
+> dosyalar `/opt/dvpx-reflector` yerine başka bir yere düşer. Hedef dizini
+> açıkça vermek, dosyaların tam olarak istediğimiz yere gelmesini sağlar —
+> `mkdir` yapmanız da gerekmez, git dizini kendisi oluşturur.
 
 ### Yol B — Elle yükleme (dosyaları size zip olarak verdiyse)
 
@@ -283,17 +338,34 @@ Kendi bilgisayarınızda, **yeni bir PowerShell/Terminal penceresi** açın (SSH
 penceresini kapatmayın) ve zip dosyasının bulunduğu dizinde:
 
 ```bash
-scp DVPX.zip root@203.0.113.10:/opt/dvpx-reflector/
+scp DVPX.zip root@203.0.113.10:/opt/
 ```
 
 Sonra SSH penceresine dönüp:
 
 ```bash
-cd /opt/dvpx-reflector
-apt install -y unzip
-unzip DVPX.zip
-rm DVPX.zip
+sudo apt install -y unzip
+cd /tmp
+sudo unzip /opt/DVPX.zip
+ls
 ```
+
+`ls` çıktısında açılan klasörün adını göreceksiniz (`DVPX`, `DVPX-main` gibi).
+O adı aşağıdaki komutta kullanın:
+
+```bash
+sudo mkdir -p /opt/dvpx-reflector
+sudo cp -r /tmp/DVPX/. /opt/dvpx-reflector/
+sudo rm -rf /tmp/DVPX /opt/DVPX.zip
+cd /opt/dvpx-reflector
+```
+
+> Sondaki `/.` önemlidir: klasörün **içindekileri** kopyalar. Onu yazmazsanız
+> dosyalar `/opt/dvpx-reflector/DVPX/` altına iner ve sonraki adımlardaki
+> yolların hiçbiri çalışmaz.
+
+> Elle kurulumda güncelleme de elle yapılır. Git ile kurduysanız güncelleme
+> `git pull` ile tek komuttur; bu yüzden Yol A önerilir.
 
 ### Doğrulayın
 
@@ -304,7 +376,7 @@ ls /opt/dvpx-reflector/src/
 **Görmeniz gereken:**
 
 ```
-config.js  control.js  index.js  logger.js  packet.js  sessions.js  tcp-server.js  udp-server.js
+config.js  control.js  index.js  logger.js  packet.js  peers.js  sessions.js  tcp-server.js  udp-server.js
 ```
 
 Bu dosyaları görmüyorsanız yol farklı olabilir. Şununla arayın:
@@ -313,8 +385,8 @@ Bu dosyaları görmüyorsanız yol farklı olabilir. Şununla arayın:
 find / -name "control.js" -path "*reflector*" 2>/dev/null
 ```
 
-Çıkan yolu not edin; sonraki adımlarda `/opt/dvpx-reflector` yerine onu
-kullanacaksınız.
+Çıkan yolu not edin; sonraki adımlarda `/opt/dvpx-reflector` yerine
+onu kullanacaksınız.
 
 ---
 
@@ -500,7 +572,7 @@ node src/index.js
 > `$(node src/index.js -v)` ile alınabilir):
 >
 > ```bash
-> node src/index.js -v          # ->  1.0.0
+> node src/index.js -v          # ->  1.0.2
 > node src/index.js -h          # kisa yardim
 > ```
 
@@ -510,10 +582,10 @@ node src/index.js
   ██████  ██    ██ ██████  ██   ██   DVPX Reflector
   ██   ██ ██    ██ ██   ██  ██ ██    Digi Voice Protocol eXtended
   ██   ██ ██    ██ ██████    ███     TCP signalling + UDP voice
-  ██   ██  ██  ██  ██       ██ ██    version 1.0.0
+  ██   ██  ██  ██  ██       ██ ██    version 1.0.2
   ██████    ████   ██      ██   ██   −·· ···− ·−· −··−
 
-[main ] version: 1.0.0
+[main ] version: 1.0.2
 [main ] server name: DVPX-ANKARA
 [main ] config file: /opt/dvpx-reflector/config.json
 [main ] limits: 500 sessions, 8 TG/user, 100 pkt/s, 90s timeout
@@ -582,14 +654,16 @@ chmod 600 /opt/dvpx-reflector/config.json
 Hazır dosya depoda var:
 
 ```bash
-cp /opt/dvpx-reflector/dvpx-reflector.service /etc/systemd/system/
+sudo cp /opt/dvpx-reflector/dvpx-reflector.service /etc/systemd/system/
 ```
 
-**Kurulum yolunuz `/opt/dvpx/DVPX/dvpx-reflector` değilse** dosyayı düzenlemeniz
-gerekir:
+Adım 4'teki yolu (`/opt/dvpx-reflector`) kullandıysanız **bu dosyada
+değiştirecek hiçbir şey yok** — servis dosyası zaten o yolu kullanıyor.
+
+**Başka bir yere kurduysanız** dosyayı düzenlemeniz gerekir:
 
 ```bash
-nano /etc/systemd/system/dvpx-reflector.service
+sudo nano /etc/systemd/system/dvpx-reflector.service
 ```
 
 Şu üç satırdaki yolu kendi yolunuzla değiştirin, sonra `Ctrl+O`, Enter,
@@ -903,29 +977,88 @@ Reflektör dosyayı yalnızca açılışta okur.
 
 ## 14. Güncelleme
 
-Yeni bir DVPX sürümü çıktığında:
+Yeni bir DVPX sürümü çıktığında ya da panel yöneticisi size **güncelleme emri**
+gönderdiğinde (panonuzda kırmızı bir uyarı olarak görürsünüz) bu bölümü
+uygulayın. İşlem 2–3 dakika sürer ve bu sürede reflektörünüz ağdan düşer.
 
-```bash
-systemctl stop dvpx-reflector
-cd /opt/dvpx
+### Önce yedek
 
-# Git ile kurduysanız:
-git pull
-
-# Elle kurduysanız yeni dosyaları aynı yere kopyalayın.
-# DİKKAT: config.json dosyanızın ÜZERİNE YAZILMAMASINA dikkat edin!
-
-chown -R dvpx:dvpx /opt/dvpx-reflector
-systemctl start dvpx-reflector
-journalctl -u dvpx-reflector -n 30 --no-pager
-```
-
-`config.json` sizin dosyanızdır; güncellemeler ona dokunmaz (depoda da
-tutulmaz). Yine de güncelleme öncesi bir yedek almak iyidir:
+`config.json` sizin dosyanızdır; güncellemeler ona dokunmaz (depoda
+tutulmadığı için `git pull` de üzerine yazmaz). Yine de bir yedek bir
+dakikanızı alır ve token'ı yeniden istemek zorunda kalmanızı önler:
 
 ```bash
 cp /opt/dvpx-reflector/config.json ~/config.json.yedek
 ```
+
+### Yol A — Git ile kurduysanız (önerilen)
+
+Git kurulu değilse:
+
+```bash
+sudo apt install -y git
+```
+
+Sonra beş komut:
+
+```bash
+sudo systemctl stop dvpx-reflector
+cd /opt/dvpx-reflector
+sudo git pull
+sudo chown -R dvpx:dvpx /opt/dvpx-reflector
+sudo systemctl start dvpx-reflector
+```
+
+> `git pull` komutunu **`/opt/dvpx-reflector` içinde** çalıştırın. Başka bir
+> dizinde `not a git repository` hatası alırsınız.
+
+**Hiç git ile kurmadıysanız** (dizin bir depo değilse) bir kereye mahsus
+yeniden klonlayabilirsiniz — `config.json`'ınız korunur:
+
+```bash
+sudo systemctl stop dvpx-reflector
+sudo mv /opt/dvpx-reflector /opt/dvpx-reflector.eski
+sudo git clone https://github.com/cektor/DVPX.git /opt/dvpx-reflector
+sudo cp /opt/dvpx-reflector.eski/config.json /opt/dvpx-reflector/
+sudo chown -R dvpx:dvpx /opt/dvpx-reflector
+sudo chmod 600 /opt/dvpx-reflector/config.json
+sudo systemctl start dvpx-reflector
+```
+
+Her şeyin çalıştığını gördükten sonra eski klasörü silebilirsiniz:
+`sudo rm -rf /opt/dvpx-reflector.eski`
+
+### Yol B — Elle kurduysanız
+
+Yeni dosyaları aynı yere kopyalayın:
+
+```bash
+sudo systemctl stop dvpx-reflector
+# yeni zip'i açıp içindekileri /opt/dvpx-reflector üzerine kopyalayın
+sudo chown -R dvpx:dvpx /opt/dvpx-reflector
+sudo systemctl start dvpx-reflector
+```
+
+> ⚠️ **DİKKAT:** `config.json` dosyanızın ÜZERİNE YAZILMAMASINA dikkat edin.
+> Yazıldıysa yedekten geri koyun: `sudo cp ~/config.json.yedek
+> /opt/dvpx-reflector/config.json`
+
+### Güncellendiğini doğrulayın
+
+```bash
+node /opt/dvpx-reflector/src/index.js -v
+systemctl status dvpx-reflector
+journalctl -u dvpx-reflector -n 30 --no-pager
+```
+
+İlk komut yeni sürüm numarasını yazmalı, servis `active (running)` olmalı ve
+log'da `DVPX reflector is ready. 73!` satırı görünmeli.
+
+Panel yöneticisi size güncelleme emri gönderdiyse: reflektör yeni sürümü
+panele bildirdiği an (en fazla birkaç dakika) panonuzdaki **kırmızı uyarı
+kendiliğinden kalkar.** Bir düğmeye basmanız ya da yöneticiye haber vermeniz
+gerekmez. Uyarı kalkmıyorsa güncelleme gerçekten uygulanmamıştır — yukarıdaki
+`-v` çıktısını kontrol edin.
 
 ---
 
