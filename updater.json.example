@@ -1,0 +1,10 @@
+{
+  "_aciklama": "Bu, dvpx-updater servisinin config.json'dan TAMAMEN AYRI config dosyasidir. Panel Reflektorler sayfasindan (ya da operatorun kendi panosundan) 'Updater Token' uretildiginde, panel size dogrudan yapistirilabilir bir kopya gosterir; asagidaki degerleri elle doldurmaniz GEREKMEZ.",
+
+  "dashboardUrl": "https://panel.ornek.com/dvpx/updater.php",
+  "updaterToken": "dvpxupd_buraya_panelin_verdigi_token_gelir",
+
+  "reflectorDir": "/opt/dvpx-reflector",
+  "gitRemote": "https://github.com/cektor/DVPX.git",
+  "gitBranch": "main"
+}

@@ -34,7 +34,7 @@ const log = createLogger('main');
  * Banner, `--version` çıktısı ve panele bildirilen sürüm hep bunu okur.
  * Yükseltirken yalnızca bu satır değiştirilir.
  */
-const SURUM = '1.0.6';
+const SURUM = '1.0.7';
 
 // Panele bildirilecek sürüm de buradan beslenir: paneldeki Reflektörler
 // tablosunda her bildirimde tazelenir (bkz. control.setAgentVersion).

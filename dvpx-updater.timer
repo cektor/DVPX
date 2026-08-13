@@ -1,0 +1,18 @@
+[Unit]
+Description=DVPX Updater'i duzenli araliklarla calistirir
+Documentation=file:/opt/dvpx-reflector/KURULUM.md
+
+[Timer]
+# Acilistan 2 dakika sonra ilk kontrol, sonra her 5 dakikada bir. Panelden
+# bir guncelleme emri birakildiginda en fazla 5 dakika icinde uygulanir —
+# "tek tusla" beklenti ile makul bir gecikme dengesi.
+OnBootSec=2min
+OnUnitActiveSec=5min
+# Ayni anda cakisan zamanlayicilarin sunucuyu ayni saniyede vurmamasi icin
+# kucuk bir rastgele gecikme (birden fazla reflektor ayni panele bagliysa
+# faydasi olur; tek reflektorde zararsizdir).
+RandomizedDelaySec=30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

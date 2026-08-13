@@ -1,0 +1,31 @@
+[Unit]
+Description=DVPX Updater (dvpx-reflector icin SSH'siz otomatik guncelleme)
+Documentation=file:/opt/dvpx-reflector/KURULUM.md
+# dvpx-reflector.service'DEN TAMAMEN BAGIMSIZDIR — bkz. tools/dvpx-updater.sh
+# basindaki aciklama. Ana servis calismasa/coksede bu birim yine de calisir.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/dvpx-reflector
+
+# BILINCLI OLARAK ROOT: bu betigin tek dis girdisi, panelden HTTPS+token ile
+# gelen bir evet/hayir bilgisidir (bkz. dashboard/updater.php) — rastgele
+# internet trafigi islemez. Ana dvpx-reflector.service ise TAM TERSINE
+# ayricaliksiz kullanicida (User=dvpx) ve NoNewPrivileges=true ile calisir,
+# cunku o internetten gelen ham paketleri isler. Bu ayrim bilinclidir: bir
+# tarafin acigi digerinin yetkisine SICRAYAMAZ.
+User=root
+ExecStart=/opt/dvpx-reflector/tools/dvpx-updater.sh
+
+# Guncelleme genelde birkac saniye surer ama git fetch yavas bir baglantida
+# uzayabilir; asiri erken kesmemek icin makul bir ust sinir.
+TimeoutStartSec=300
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dvpx-updater
+
+[Install]
+WantedBy=multi-user.target

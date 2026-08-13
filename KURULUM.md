@@ -27,6 +27,7 @@ Tahmini süre: **20–30 dakika.**
 14. [Güncelleme](#14-güncelleme)
 15. [Sık sorulanlar](#15-sık-sorulanlar)
 16. [Reflektörler arası bağ (TG'ler ortak)](#16-reflektörler-arası-bağ-tgler-ortak)
+17. [Otomatik güncelleme — SSH'siz (opsiyonel)](#17-otomatik-güncelleme--sshsiz-opsiyonel)
 
 ---
 
@@ -1060,6 +1061,11 @@ kendiliğinden kalkar.** Bir düğmeye basmanız ya da yöneticiye haber vermeni
 gerekmez. Uyarı kalkmıyorsa güncelleme gerçekten uygulanmamıştır — yukarıdaki
 `-v` çıktısını kontrol edin.
 
+> **Bu adımların tamamını her seferinde elle yapmak istemiyorsanız** §17'ye
+> bakın: isteğe bağlı bir yardımcı servis kurarak panel yöneticisi bir
+> güncelleme emri bıraktığında reflektörünüzün **kendiliğinden** (SSH'a hiç
+> girmeden) güncellenmesini sağlayabilirsiniz.
+
 ---
 
 ## 15. Sık sorulanlar
@@ -1121,7 +1127,7 @@ zaman bant genişliğidir, CPU değil.
 ### Ne yapar?
 
 DVPX'te bir konuşma grubu (TG) **tek bir reflektöre ait değildir.** Siz kendi
-reflektörünüzde TG 286'da iken, başka bir reflektördeki bir arkadaşınız da TG
+reflektörünüzde TG 9034'da iken, başka bir reflektördeki bir arkadaşınız da TG
 286'da ise **birbirinizi duyarsınız ve konuşabilirsiniz.** Özel çağrılar da
 ağ genelindedir: aradığınız kişi hangi reflektörde kayıtlıysa çağrı orada çalar.
 
@@ -1184,6 +1190,136 @@ Bir konuşma 20 ms'de bir ~66 baytlık paket üretir (≈26 kbit/s). Peer çerç
 32 bayt başlık ekler → peer başına **≈40 kbit/s per aktif konuşma**. Üç
 reflektörlü bir ağda tek konuşmacı için giden trafik ≈80 kbit/s'dir; sıradan bir
 VPS için ihmal edilebilir.
+
+---
+
+## 17. Otomatik güncelleme — SSH'siz (opsiyonel)
+
+### Bu ne yapar?
+
+Normalde bir güncelleme emri geldiğinde (§14) SSH'a girip birkaç komut
+çalıştırmanız gerekir. Bu bölümdeki **isteğe bağlı** yardımcı servisi
+kurarsanız, panel yöneticisi bir güncelleme emri bıraktığı an
+reflektörünüz **kendiliğinden**: en fazla birkaç dakika içinde yeni sürümü
+çeker, servisi güvenli şekilde durdurup yeniden başlatır ve sonucu panele
+bildirir. Siz hiçbir şey yapmazsınız; SSH'a hiç girmeniz gerekmez.
+
+### Tam olarak neye izin vermiş olursunuz?
+
+Bunu kurmak, panel yöneticisine sunucunuzda **şunu** yapabilme yetkisi verir
+— **başka hiçbir şey değil**:
+
+```
+git fetch + git reset --hard   (yalnızca sizin belirlediğiniz depo/daldan)
+systemctl stop/start dvpx-reflector
+```
+
+- Panel size **asla** bir adres, dal adı ya da komut göndermez — yalnızca
+  "bekleyen bir emrin var/yok" der. Nereden, hangi daldan çekileceği HER
+  ZAMAN bu sunucudaki `updater.json` dosyasından okunur (aşağıda siz
+  yazarsınız). Panel tamamen ele geçirilse bile en kötü ihtimalle
+  "gereksiz bir güncelleme" tetiklenir; başka bir sunucudan kod çekilemez.
+- `config.json` ve `policy.cache.json` dosyalarınıza **hiçbir zaman**
+  dokunulmaz (bkz. Adım 3 — bunlar depoda izlenmez).
+- Bu yetki, **ana reflektör servisinden TAMAMEN AYRI**, kendi başına
+  root ile çalışan küçük bir yardımcı servise (`dvpx-updater`) aittir.
+  İnternetten gelen sesi/sinyali işleyen asıl `dvpx-reflector` servisi
+  hâlâ ayrıcalıksız kullanıcıda çalışmaya devam eder — orada olası bir
+  açık, bu yeni yetkiye SIÇRAYAMAZ.
+- **Kurmazsanız hiçbir şey değişmez.** Reflektörünüz bugünkü gibi, elle
+  (§14) güncellenir.
+- **İstediğiniz an, tek komutla geri alabilirsiniz** — Adım 5'e bakın.
+
+### Adım 1 — Yöneticiden "updater token" isteyin
+
+Bu, config.json'daki API token'ınızdan **AYRI** ikinci bir anahtardır.
+Panelde **Reflektörlerim** sayfasından **🤖 Otomatik Güncelleme İste**
+düğmesine basıp kısa bir gerekçe yazarsanız, yönetici onayladığında token
+panonuza düşer. (Yönetici isterse sormadan da üretip size iletebilir.)
+
+### Adım 2 — Token'ı açın ve updater.json'u oluşturun
+
+Panelde **🤖 Updater Token'ı Göster**'e basınca, doğrudan kullanıma hazır
+bir `updater.json` içeriği gösterilir:
+
+```json
+{
+  "dashboardUrl": "https://panel.ornek.com/dvpx/updater.php",
+  "updaterToken": "dvpxupd_8f3a91c7e2b45d06a1f8...",
+  "reflectorDir": "/opt/dvpx-reflector",
+  "gitRemote": "https://github.com/cektor/DVPX.git",
+  "gitBranch": "main"
+}
+```
+
+Sunucuda kaydedin:
+
+```bash
+sudo nano /opt/dvpx-reflector/updater.json
+```
+
+(İçeriği yapıştırıp kaydedin.) Ardından gizleyin:
+
+```bash
+sudo chmod 600 /opt/dvpx-reflector/updater.json
+```
+
+> **`/opt/dvpx-reflector` git ile kurulmamışsa** (Yol B — elle kurulum)
+> endişelenmeyin: yardımcı servis ilk çalıştığında dizini kendiliğinden
+> git'e bağlar; `config.json` ve `policy.cache.json` dosyalarınıza
+> dokunmaz.
+
+### Adım 3 — Servisleri kurun
+
+```bash
+sudo cp /opt/dvpx-reflector/dvpx-updater.service /etc/systemd/system/
+sudo cp /opt/dvpx-reflector/dvpx-updater.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now dvpx-updater.timer
+```
+
+Farklı bir yola kurduysanız `dvpx-updater.service` içindeki
+`WorkingDirectory` ve `ExecStart` satırlarını, `dvpx-reflector.service`'te
+yaptığınız gibi düzeltin.
+
+### Adım 4 — Doğrulayın
+
+```bash
+systemctl status dvpx-updater.timer
+journalctl -u dvpx-updater -n 30 --no-pager
+```
+
+Bekleyen bir emir yoksa günlükte `bekleyen emir yok, cikiliyor` görürsünüz —
+bu normaldir ve **her 5 dakikada bir** tekrarlanır. Yönetici bir emir
+bıraktığında bir sonraki turda otomatik olarak uygulanır; ilerlemeyi aynı
+komutla izleyebilirsiniz.
+
+Elle bir kez hemen denemek isterseniz:
+
+```bash
+sudo /opt/dvpx-reflector/tools/dvpx-updater.sh
+```
+
+### Adım 5 — Vazgeçmek isterseniz
+
+Tek komut yeterlidir, geri dönüşü yoktur bir zarar da vermez:
+
+```bash
+sudo systemctl disable --now dvpx-updater.timer
+```
+
+Ana reflektör servisiniz bundan hiç etkilenmez, çalışmaya devam eder.
+İsterseniz panelden de **updater token'ını iptal edin** (🤖✕ / "Otomatik
+güncellemeyi kapat") — bu, panel tarafındaki izni de kapatır.
+
+### Bir güncelleme başarısız olursa ne olur?
+
+Yardımcı servis yeni sürümü uyguladıktan birkaç saniye sonra servisin
+gerçekten ayakta kaldığını kontrol eder. Ayakta kalmazsa **kendiliğinden
+bir önceki sürüme geri döner** ve servisi öyle başlatır — reflektörünüz asla
+"yarı güncellenmiş" bir hâlde ağdan düşmüş kalmaz. Sonuç (başarılı ya da
+geri alındı) hem `journalctl -u dvpx-updater` çıktısında hem panelde
+(Reflektörlerim → sürüm sütununun altında) görünür.
 
 ---
 
