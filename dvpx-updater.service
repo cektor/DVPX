@@ -17,7 +17,13 @@ WorkingDirectory=/opt/dvpx-reflector
 # cunku o internetten gelen ham paketleri isler. Bu ayrim bilinclidir: bir
 # tarafin acigi digerinin yetkisine SICRAYAMAZ.
 User=root
-ExecStart=/opt/dvpx-reflector/tools/dvpx-updater.sh
+# Betiği DOĞRUDAN değil, `bash` ÜZERİNDEN çağırıyoruz: dosya GitHub'ın web
+# "Add files via upload" özelliğiyle yönetiliyor, o da Unix çalıştırma iznini
+# (chmod +x) HİÇBİR ZAMAN saklamaz — depoda dosya hep "644" olarak commit
+# edilir ve her `git pull`/`reset --hard` bunu sessizce geri alır. Bash'e
+# argüman olarak vermek dosyanın +x bitine bağımlılığı TAMAMEN kaldırır;
+# yalnızca okunabilir olması yeterlidir.
+ExecStart=/bin/bash /opt/dvpx-reflector/tools/dvpx-updater.sh
 
 # Guncelleme genelde birkac saniye surer ama git fetch yavas bir baglantida
 # uzayabilir; asiri erken kesmemek icin makul bir ust sinir.
