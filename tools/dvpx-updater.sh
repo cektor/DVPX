@@ -94,7 +94,32 @@ GIT_REMOTE="${GIT_REMOTE:-https://github.com/cektor/DVPX.git}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 [ -d "$REFLECTOR_DIR" ] || die "reflectorDir yok: $REFLECTOR_DIR"
 
-SERVICE_USER="$(stat -c '%U' "$REFLECTOR_DIR" 2>/dev/null || echo dvpx)"
+# Guncelleme sonrasi izinleri hangi kullaniciya cevirecegimizi belirler.
+#
+# ONEMLI: bunu "$REFLECTOR_DIR dizininin sahibi kim?" diye SORARAK BULMAYIN
+# (eski hali buydu). `sudo mkdir`/`sudo git clone` ile olusturulan bir dizin,
+# icindeki dosyalar sonradan tek tek `dvpx` kullanicisina chown edilmis olsa
+# BILE, dizinin KENDISI cogu zaman hala root'a aittir. O zaman bu betik
+# SERVICE_USER'i yanlislikla "root" saniyor, `chown -R root:root` calistirip
+# ONCEDEN DOGRU olan dvpx sahipligini BOZUYORDU — reflektor bir daha kendi
+# config.json'unu OKUYAMAZ hale geliyordu (EACCES). Gercek kaynak, dvpx-
+# reflector.service dosyasindaki `User=` satiridir; systemd'ye SORUYORUZ.
+SERVICE_USER="$(systemctl show dvpx-reflector.service -p User --value 2>/dev/null)"
+if [ -z "$SERVICE_USER" ] || [ "$SERVICE_USER" = "root" ]; then
+    # Bos deger = systemd'de User= hic yazilmamis (varsayilan root demektir).
+    # dvpx-reflector'i gercekten root ile calistiran biri icin bu chown
+    # gereksizdir ama ZARARSIZDIR (root zaten her seyi okuyabilir); KURULUM.md
+    # her zaman "dvpx" kullanicisini ONERDIGI icin GUVENLI varsayilan budur.
+    SERVICE_USER="dvpx"
+fi
+# Grup adinin kullanici adiyla AYNI oldugunu VARSAYMIYORUZ (useradd'in her
+# kurulumda ayni isimde bir grup actigi garanti degildir). Once servisin
+# ACIKCA yazilmis Group='una bakariz; o da yoksa systemd zaten User='in
+# BIRINCIL grubunu kullanir, biz de ayni sonucu `id -gn` ile kendimiz buluruz.
+SERVICE_GROUP="$(systemctl show dvpx-reflector.service -p Group --value 2>/dev/null)"
+if [ -z "$SERVICE_GROUP" ]; then
+    SERVICE_GROUP="$(id -gn "$SERVICE_USER" 2>/dev/null || echo "$SERVICE_USER")"
+fi
 
 # Bu betik ROOT ile calisir ama $REFLECTOR_DIR normalde ayrıcalıksız servis
 # kullanıcısına (`dvpx`, ya da ilk kurulumu yapan gercek kullaniciya) aittir.
@@ -181,13 +206,17 @@ NEW_HEAD="$(gitc rev-parse "origin/$GIT_BRANCH")"
 # metnini de tasir ve PREV_HEAD sessizce "HEAD" STRING'ine esitlenir — geri
 # alma sirasinda "git reset --hard HEAD" gibi bir HICBIR SEY YAPMAYAN komutla
 # sonuclanirdi. `--verify -q` byle durumlarda stdout'a HICBIR SEY yazmaz.
+#
+# BİLİNÇLİ TERCİH — burada "zaten origin ile aynı miyim?" diye SORULMUYOR.
+# Panel bir emir bıraktıysa (pending=true) betik SORGUSUZ uygular: durdurur,
+# `reset --hard` yapar, başlatır — commit aynı olsa bile. Bunun bedeli
+# yalnızca BİR kez gereksiz bir servis yeniden başlatmasıdır (canlı bir
+# konuşma o an kesilebilir); ama emir zaten İLK başarılı bildirimde
+# kendiliğinden kapandığı için (bkz. dashboard/updater.php) bu ASLA
+# tekrar tekrar olmaz — panel yöneticisi yeni bir emir bırakana kadar bir
+# daha dokunulmaz. `PREV_HEAD` yine de tutuluyor: yeni sürüm sağlıksız
+# çıkarsa geri dönülecek yer burasıdır.
 PREV_HEAD="$(gitc rev-parse --verify -q HEAD 2>/dev/null || true)"
-
-if [ -n "$PREV_HEAD" ] && [ "$PREV_HEAD" = "$NEW_HEAD" ]; then
-    log "zaten guncel (${NEW_HEAD:0:8}); servise dokunulmadi"
-    report true "$(reflector_version)" "already current (${NEW_HEAD:0:8})"
-    exit 0
-fi
 
 log "guncelleniyor: ${PREV_HEAD:0:8} -> ${NEW_HEAD:0:8}"
 
@@ -203,7 +232,12 @@ apply_and_check() {
     # "git clean" YOK: config.json ve policy.cache.json izlenmeyen dosyalardir
     # (bkz. .gitignore) — reset --hard onlara dokunmaz, clean SILERDI.
     gitc reset --hard "$rev" --quiet || return 1
-    chown -R "$SERVICE_USER":"$SERVICE_USER" "$REFLECTOR_DIR" 2>/dev/null || true
+    # ARTIK SESSIZCE YUTULMUYOR: bu chown basarisiz olursa (ör. dvpx grubu
+    # yok) servis kendi config.json'unu okuyamaz hale gelir — EACCES ile
+    # crash-loop'a girer ama updater "basarili" ya da belirsiz bir "saglik"
+    # sonucu raporlardi. Uyari en azindan journalctl'de gorunsun.
+    chown -R "$SERVICE_USER":"$SERVICE_GROUP" "$REFLECTOR_DIR" \
+        || warn "chown basarisiz (${SERVICE_USER}:${SERVICE_GROUP}) — reflektor kendi dosyalarini okuyamayabilir"
     systemctl start dvpx-reflector || return 1
     sleep 8
     systemctl is-active --quiet dvpx-reflector
