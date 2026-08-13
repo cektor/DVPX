@@ -27,6 +27,7 @@ Estimated time: **20–30 minutes.**
 14. [Updating](#14-updating)
 15. [Frequently asked questions](#15-frequently-asked-questions)
 16. [Reflector-to-reflector link (shared talkgroups)](#16-reflector-to-reflector-link-shared-talkgroups)
+17. [Automatic updates — no SSH (optional)](#17-automatic-updates--no-ssh-optional)
 
 ---
 
@@ -1070,6 +1071,11 @@ warning on your panel clears itself.** You do not have to press a button or
 notify the administrator. If the warning stays, the update did not actually take
 effect — check the `-v` output above.
 
+> **If you don't want to do all of this by hand every time**, see §17: by
+> installing an optional helper service, your reflector can update **itself**
+> (no SSH needed at all) the moment the dashboard administrator places an
+> update order.
+
 ---
 
 ## 15. Frequently asked questions
@@ -1203,6 +1209,171 @@ A transmission produces a packet of about 66 bytes every 20 ms (≈26 kbit/s). A
 peer frame adds a 32-byte header → **≈40 kbit/s per active transmission per
 peer**. In a network of three reflectors the outgoing traffic for a single
 speaker is ≈80 kbit/s; negligible for an ordinary VPS.
+
+---
+
+## 17. Automatic updates — no SSH (optional)
+
+### What does this do?
+
+Normally, when an update order arrives (§14) you have to log in over SSH and
+run a few commands. If you install the **optional** helper service in this
+section, the moment the dashboard administrator places an update order your
+reflector will, **by itself**, within a few minutes: pull the new version,
+safely stop and restart the service, and report the result back to the
+dashboard. You do nothing; you never have to open an SSH session.
+
+### What exactly are you granting?
+
+Installing this gives the dashboard administrator the ability to do
+**exactly this** on your server — **nothing else**:
+
+```
+git fetch + git reset --hard   (only from the repo/branch YOU set)
+systemctl stop/start dvpx-reflector
+```
+
+- The dashboard **never** sends you an address, branch name, or command —
+  it only ever says "there is/isn't a pending order". Where to pull from,
+  and which branch, are **always** read from the `updater.json` file on
+  this server (you write it, below). Even if the dashboard were fully
+  compromised, the worst case is an "unnecessary update" being triggered;
+  code can never be pulled from some other server.
+- Your `config.json` and `policy.cache.json` files are **never** touched
+  (see Step 3 — they are not tracked in the repository).
+- This capability belongs to a small helper service (`dvpx-updater`) that
+  runs **completely separately from the main reflector process**, on its
+  own, as root. The actual `dvpx-reflector` service that handles voice and
+  signalling coming in from the internet keeps running as an unprivileged
+  user — a bug there can never escalate into this new capability.
+- **If you don't install it, nothing changes.** Your reflector keeps being
+  updated by hand (§14), exactly as today.
+- **You can withdraw it at any time, with a single command** — see Step 5.
+
+### First — are these files already on your server?
+
+`tools/dvpx-updater.sh`, `dvpx-updater.service`, `dvpx-updater.timer`, and
+`updater.json.example` arrive on the reflector through the **normal update
+procedure in §14** — an older installation, set up before this feature was
+released, may not have them yet. Check:
+
+```bash
+ls /opt/dvpx-reflector/tools/dvpx-updater.sh
+```
+
+**If it says "No such file or directory"**, update your reflector first:
+
+- **If you installed with Git** (`/opt/dvpx-reflector/.git` exists):
+  ```bash
+  cd /opt/dvpx-reflector
+  sudo git pull
+  ```
+  This does NOT require stopping the main `dvpx-reflector` service — as
+  long as the service's own code (`src/`) hasn't changed, files are simply
+  added and the running service is unaffected. If you are unsure, apply
+  the full §14 procedure anyway (stop → pull → start); it does no harm.
+- **If you installed manually**, ask the network administrator or get
+  these four files from `https://github.com/cektor/DVPX` and copy them by
+  hand into the matching relative paths (`tools/` and the reflector's root
+  directory), then:
+  ```bash
+  sudo chmod +x /opt/dvpx-reflector/tools/dvpx-updater.sh
+  ```
+
+If the files are already there, skip straight to Step 1.
+
+### Step 1 — Ask the administrator for an "updater token"
+
+This is a **second key, separate** from the API token in your config.json.
+On the dashboard, from the **My Reflectors** page, press **🤖 Request
+Auto-Update**, write a short justification, and once the administrator
+approves it the token lands on your panel. (The administrator may also
+generate and hand it to you without being asked.)
+
+### Step 2 — Open it and create updater.json
+
+On the dashboard, pressing **🤖 Show Updater Token** shows a ready-to-use
+`updater.json`:
+
+```json
+{
+  "dashboardUrl": "https://panel.example.com/dvpx/updater.php",
+  "updaterToken": "dvpxupd_8f3a91c7e2b45d06a1f8...",
+  "reflectorDir": "/opt/dvpx-reflector",
+  "gitRemote": "https://github.com/cektor/DVPX.git",
+  "gitBranch": "main"
+}
+```
+
+Save it on the server:
+
+```bash
+sudo nano /opt/dvpx-reflector/updater.json
+```
+
+(Paste the content and save.) Then lock it down:
+
+```bash
+sudo chmod 600 /opt/dvpx-reflector/updater.json
+```
+
+> **If `/opt/dvpx-reflector` was not installed with Git** (Way B — manual
+> install), don't worry: the helper service converts the directory to a
+> Git checkout by itself on its first run; it does not touch your
+> `config.json` or `policy.cache.json`.
+
+### Step 3 — Install the services
+
+```bash
+sudo cp /opt/dvpx-reflector/dvpx-updater.service /etc/systemd/system/
+sudo cp /opt/dvpx-reflector/dvpx-updater.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now dvpx-updater.timer
+```
+
+If you installed to a different path, fix the `WorkingDirectory` and
+`ExecStart` lines in `dvpx-updater.service`, just as you did for
+`dvpx-reflector.service`.
+
+### Step 4 — Verify
+
+```bash
+systemctl status dvpx-updater.timer
+journalctl -u dvpx-updater -n 30 --no-pager
+```
+
+If there is no pending order you will see `bekleyen emir yok, cikiliyor`
+("no pending order, exiting") in the log — this is normal and repeats
+**every 5 minutes**. When the administrator places an order it is applied
+on the next tick automatically; watch progress with the same command.
+
+To try it once immediately by hand:
+
+```bash
+sudo /opt/dvpx-reflector/tools/dvpx-updater.sh
+```
+
+### Step 5 — If you change your mind
+
+One command is enough, it's fully reversible and does no harm:
+
+```bash
+sudo systemctl disable --now dvpx-updater.timer
+```
+
+Your main reflector service is completely unaffected and keeps running. If
+you like, also **revoke the updater token** on the dashboard (🤖✕ /
+"Disable auto-update") — that closes the permission on the dashboard side
+too.
+
+### What happens if an update fails?
+
+A few seconds after applying a new version, the helper service checks that
+the service is actually still up. If it isn't, it **automatically rolls
+back** to the previous version and starts that instead — your reflector
+never gets stuck "half-updated" and off the network. The result (success or
+rolled-back) shows up both in `journalctl -u dvpx-updater` and on the
+dashboard (My Reflectors → underneath the version column).
 
 ---
 

@@ -1230,6 +1230,38 @@ systemctl stop/start dvpx-reflector
   (§14) güncellenir.
 - **İstediğiniz an, tek komutla geri alabilirsiniz** — Adım 5'e bakın.
 
+### Önce — bu dosyalar sunucunuzda var mı?
+
+`tools/dvpx-updater.sh`, `dvpx-updater.service`, `dvpx-updater.timer` ve
+`updater.json.example` dosyaları, reflektöre **§14'teki normal güncelleme
+prosedürüyle** gelir — bu özellik daha önce yayınlanmamış eski bir kurulumda
+bunlar henüz yok olabilir. Kontrol edin:
+
+```bash
+ls /opt/dvpx-reflector/tools/dvpx-updater.sh
+```
+
+**"No such file or directory" derse**, önce reflektörünüzü güncelleyin:
+
+- **Git ile kurduysanız** (`/opt/dvpx-reflector/.git` var):
+  ```bash
+  cd /opt/dvpx-reflector
+  sudo git pull
+  ```
+  Bu, ana `dvpx-reflector` servisini durdurmanızı GEREKTİRMEZ — servisin
+  kendi kodu (`src/`) değişmediği sürece dosyalar eklenir, servis
+  etkilenmez. Emin değilseniz yine de §14'teki tam prosedürü uygulayın
+  (durdur → pull → başlat), zararı yoktur.
+- **Elle/zip ile kurduysanız**, ağ yöneticisinden ya da
+  `https://github.com/cektor/DVPX` deposundan bu dört dosyayı isteyip
+  aynı göreli yollara (`tools/` ve reflektör kök dizini) elle kopyalayın,
+  sonra:
+  ```bash
+  sudo chmod +x /opt/dvpx-reflector/tools/dvpx-updater.sh
+  ```
+
+Dosyalar yerindeyse doğrudan Adım 1'e geçin.
+
 ### Adım 1 — Yöneticiden "updater token" isteyin
 
 Bu, config.json'daki API token'ınızdan **AYRI** ikinci bir anahtardır.

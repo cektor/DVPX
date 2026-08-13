@@ -96,6 +96,20 @@ GIT_BRANCH="${GIT_BRANCH:-main}"
 
 SERVICE_USER="$(stat -c '%U' "$REFLECTOR_DIR" 2>/dev/null || echo dvpx)"
 
+# Bu betik ROOT ile calisir ama $REFLECTOR_DIR normalde ayrıcalıksız servis
+# kullanıcısına (`dvpx`, ya da ilk kurulumu yapan gercek kullaniciya) aittir.
+# Git 2.35.2+ (CVE-2022-24765 duzeltmesi) "safe.directory" korumasi, calisan
+# kullanicinin SAHIP OLMADIGI bir dizinde git komutu calistirmayi ACIKCA
+# GUVENDIGINIZ dizinler listesine eklemeden REDDEDER — normal, BEKLENEN bir
+# kurulumda (chown -R dvpx:dvpx /opt/dvpx-reflector, KURULUM.md'nin kendi
+# talimati) bu HER ZAMAN tetiklenir. `--global` ile kalici bir ayar
+# yazmak yerine (her calismada tekrar tekrar eklenip .gitconfig'i
+# sismesin diye) her cagriya YEREL bir override veriyoruz — kalici hicbir
+# yapilandirma degisikligi birakmaz.
+gitc() {
+    git -c safe.directory="$REFLECTOR_DIR" -C "$REFLECTOR_DIR" "$@"
+}
+
 # ── Aynı anda iki kopya çalışmasın (zamanlayıcı üst üste binerse) ────────
 exec 9>"$LOCK_FILE"
 flock -n 9 || { log "onceki calisma hala surüyor, bu turu atliyorum"; exit 0; }
@@ -146,20 +160,20 @@ log "guncelleme emri var (hedef: ${TARGET:-?}) — kontrol ediliyor"
 # ── 2) Yeni bir şey var mı? (servise DOKUNMADAN önce bak) ────────────────
 if [ ! -d "$REFLECTOR_DIR/.git" ]; then
     log "git deposu yok, mevcut kurulum git'e bagliyor (ilk kurulumdan kalma dosyalar KORUNUR)"
-    git -C "$REFLECTOR_DIR" init -q
-    git -C "$REFLECTOR_DIR" remote add origin "$GIT_REMOTE"
+    gitc init -q
+    gitc remote add origin "$GIT_REMOTE"
 else
     # Uzak adres HER ZAMAN bu sunucudaki updater.json'dan gelir; panelden
     # ASLA. Operatör updater.json'u degistirmedigi surece bu satirin bir
     # etkisi yoktur.
-    git -C "$REFLECTOR_DIR" remote set-url origin "$GIT_REMOTE" 2>/dev/null \
-        || git -C "$REFLECTOR_DIR" remote add origin "$GIT_REMOTE"
+    gitc remote set-url origin "$GIT_REMOTE" 2>/dev/null \
+        || gitc remote add origin "$GIT_REMOTE"
 fi
 
-git -C "$REFLECTOR_DIR" fetch origin "$GIT_BRANCH" --quiet \
+gitc fetch origin "$GIT_BRANCH" --quiet \
     || die "git fetch basarisiz ($GIT_REMOTE / $GIT_BRANCH)"
 
-NEW_HEAD="$(git -C "$REFLECTOR_DIR" rev-parse "origin/$GIT_BRANCH")"
+NEW_HEAD="$(gitc rev-parse "origin/$GIT_BRANCH")"
 # `git rev-parse HEAD` bir "unborn branch" (hic commit yok — az once bootstrap
 # edilmis bir kurulum) uzerinde basarisiz OLUR ama basarisiz olurken stdout'a
 # yine de "HEAD" YAZAR (git'in kendine has bir davranisi). Bu, `... || echo ''`
@@ -167,7 +181,7 @@ NEW_HEAD="$(git -C "$REFLECTOR_DIR" rev-parse "origin/$GIT_BRANCH")"
 # metnini de tasir ve PREV_HEAD sessizce "HEAD" STRING'ine esitlenir — geri
 # alma sirasinda "git reset --hard HEAD" gibi bir HICBIR SEY YAPMAYAN komutla
 # sonuclanirdi. `--verify -q` byle durumlarda stdout'a HICBIR SEY yazmaz.
-PREV_HEAD="$(git -C "$REFLECTOR_DIR" rev-parse --verify -q HEAD 2>/dev/null || true)"
+PREV_HEAD="$(gitc rev-parse --verify -q HEAD 2>/dev/null || true)"
 
 if [ -n "$PREV_HEAD" ] && [ "$PREV_HEAD" = "$NEW_HEAD" ]; then
     log "zaten guncel (${NEW_HEAD:0:8}); servise dokunulmadi"
@@ -188,7 +202,7 @@ apply_and_check() {
     systemctl stop dvpx-reflector 2>/dev/null || true
     # "git clean" YOK: config.json ve policy.cache.json izlenmeyen dosyalardir
     # (bkz. .gitignore) — reset --hard onlara dokunmaz, clean SILERDI.
-    git -C "$REFLECTOR_DIR" reset --hard "$rev" --quiet || return 1
+    gitc reset --hard "$rev" --quiet || return 1
     chown -R "$SERVICE_USER":"$SERVICE_USER" "$REFLECTOR_DIR" 2>/dev/null || true
     systemctl start dvpx-reflector || return 1
     sleep 8
